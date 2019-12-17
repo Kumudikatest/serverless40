@@ -1,0 +1,216 @@
+{
+  "EDITOR_STATE": {
+    "allProjectFiles": {
+      "c3c0d832-0316-4205-bb0e-109245f531e5": {
+        "id": "c3c0d832-0316-4205-bb0e-109245f531e5",
+        "parent": null,
+        "name": "upload-to-s3-and-postprocess",
+        "type": "DIRECTORY",
+        "isDirectory": true,
+        "children": [
+          "5a9dd21b-06b6-4ea4-887d-d8dd394bf243",
+          "2d186aa6-2ce0-46e4-87f8-1bd5de0090b8",
+          "e275e53e-c3f2-4707-aa89-d06b5c0bda3d"
+        ],
+        "isRemovable": false,
+        "filePath": "upload-to-s3-and-postprocess"
+      },
+      "5a9dd21b-06b6-4ea4-887d-d8dd394bf243": {
+        "id": "5a9dd21b-06b6-4ea4-887d-d8dd394bf243",
+        "parent": "c3c0d832-0316-4205-bb0e-109245f531e5",
+        "name": "handler.js",
+        "type": "JS_LAMBDA",
+        "isDirectory": false,
+        "children": [],
+        "isRemovable": true,
+        "filePath": "upload-to-s3-and-postprocess/handler.js",
+        "code": "'use strict';\n\nmodule.exports.postprocess = (event) => {\n  event.Records.forEach((record) => {\n    const filename = record.s3.object.key;\n    const filesize = record.s3.object.size;\n    console.log(`New .png object has been created: ${filename} (${filesize} bytes)`);\n  });\n};\n",
+        "config": {
+          "runtime": "nodejs10.x",
+          "handler": "postprocess",
+          "timeout": 60,
+          "memory": 128,
+          "layers": []
+        },
+        "triggers": [
+          {
+            "resourceName": "s3cloud9Ktest",
+            "config": {
+              "type": "s3:ObjectCreated:*",
+              "keyPrefix": "",
+              "keySuffix": ".png"
+            }
+          }
+        ],
+        "customSecurityPolicy": {
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:*"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+      },
+      "2d186aa6-2ce0-46e4-87f8-1bd5de0090b8": {
+        "id": "2d186aa6-2ce0-46e4-87f8-1bd5de0090b8",
+        "parent": "c3c0d832-0316-4205-bb0e-109245f531e5",
+        "name": "frontend",
+        "type": "DIRECTORY",
+        "isDirectory": true,
+        "children": [
+          "61469328-9d7c-46fe-9583-1d8ad75b9308"
+        ],
+        "isRemovable": true,
+        "filePath": "upload-to-s3-and-postprocess/frontend"
+      },
+      "ac0f6ab8-dfdd-4dcc-93f8-5d4aec60595f": {
+        "id": "ac0f6ab8-dfdd-4dcc-93f8-5d4aec60595f",
+        "parent": null,
+        "name": "serverless.yml",
+        "type": "YAML_FILE",
+        "isDirectory": false,
+        "children": [],
+        "isRemovable": true,
+        "filePath": "serverless.yml",
+        "code": "service: upload-to-s3-and-postprocess\n\nframeworkVersion: \">=1.1.0\"\n\ncustom:\n  bucket: cloud9-ktest\n\nprovider:\n  name: aws\n  runtime: nodejs8.10\n  iamRoleStatements:\n    - Effect: Allow\n      Action:\n        - s3:*\n      Resource: \"*\"\n\nfunctions:\n  postprocess:\n    handler: handler.postprocess\n    events:\n      - s3:\n          bucket: ${self:custom.bucket}\n          event: s3:ObjectCreated:*\n          rules:\n            - suffix: .png\n"
+      },
+      "e275e53e-c3f2-4707-aa89-d06b5c0bda3d": {
+        "id": "e275e53e-c3f2-4707-aa89-d06b5c0bda3d",
+        "parent": "c3c0d832-0316-4205-bb0e-109245f531e5",
+        "name": "generate-form.js",
+        "type": "JS_FILE",
+        "isDirectory": false,
+        "children": [],
+        "isRemovable": true,
+        "filePath": "upload-to-s3-and-postprocess/generate-form.js",
+        "code": "#!/usr/bin/env node\n\nconst crypto = require('crypto');\nconst fs = require('fs');\n\nconst awsAccessKeyId = process.env.awsAccessKeyId;\nconst awsSecretAccessKey = process.env.awsSecretAccessKey;\nconst bucketName = 'cloud9-ktest';\n\nconst msPerDay = 24 * 60 * 60 * 1000;\nconst expiration = new Date(Date.now() + msPerDay).toISOString();\nconst bucketUrl = `https://${bucketName}.s3.amazonaws.com`;\n\nconst policy = {\n  expiration,\n  conditions: [\n    ['starts-with', '$key', 'uploads/'],\n    { bucket: bucketName },\n    { acl: 'public-read' },\n    ['starts-with', '$Content-Type', 'image/png'],\n    { success_action_status: '201' },\n  ],\n};\n\nconst policyB64 = Buffer(JSON.stringify(policy), 'utf-8').toString('base64');\n\nconst hmac = crypto.createHmac('sha1', awsSecretAccessKey);\nhmac.update(new Buffer(policyB64, 'utf-8'));\n\nconst signature = hmac.digest('base64');\n\nfs.readFile('frontend/index.template.html', 'utf8', (err, input) => {\n  if (err) {\n    console.log(err);\n  }\n\n  const data = input\n    .replace(/%BUCKET_URL%/g, bucketUrl)\n    .replace(/%AWS_ACCESS_KEY%/g, awsAccessKeyId)\n    .replace(/%POLICY_BASE64%/g, policyB64)\n    .replace(/%SIGNATURE%/g, signature);\n\n  fs.writeFile('frontend/index.html', data, 'utf8', (e) => {\n    if (e) {\n      console.log(e);\n    }\n  });\n});\n"
+      },
+      "fc45f7e7-c7a1-495c-8167-86da79b6e157": {
+        "id": "fc45f7e7-c7a1-495c-8167-86da79b6e157",
+        "parent": null,
+        "name": ".gitignore",
+        "type": "TEXT_FILE",
+        "isDirectory": false,
+        "children": [],
+        "isRemovable": true,
+        "filePath": ".gitignore",
+        "code": "node_modules\n.serverless\nindex.html\n"
+      },
+      "1760c60e-c388-4d3a-8635-9a454caceac2": {
+        "id": "1760c60e-c388-4d3a-8635-9a454caceac2",
+        "parent": null,
+        "name": "README.md",
+        "type": "MARKDOWN_FILE",
+        "isDirectory": false,
+        "children": [],
+        "isRemovable": true,
+        "filePath": "README.md",
+        "code": "<!--\ntitle: 'AWS Upload a file to S3 to trigger a Lambda function example in NodeJS'\ndescription: 'This example shows how to upload a file to S3 using a HTML form, and have S3 trigger a lambda function.'\nlayout: Doc\nframework: v1\nplatform: AWS\nlanguage: nodeJS\nauthorLink: 'https://github.com/walgarch'\nauthorName: walgarch\nauthorAvatar: 'https://avatars1.githubusercontent.com/u/32451330?v=4&s=140'\n-->\n# Upload a file to S3 to trigger a lambda function\n\nThis example shows how to upload a file to S3 using a HTML form, and have S3\ntrigger a lambda function.\n\n## Use-cases\n\n- Postprocess files uploaded to an S3 bucket.\n\n## Setup\n\n- Edit `serverless.yml` and choose a unique S3 bucket name.\n- Edit `generate-form.js` and fill in your `aws_access_key_id`,\n  `aws_secret_access_key` and `bucket_name`.\n- Generate the HTML form:\n\n\n```bash\nnode generate-form.js\n```\n\n## Deploy\n\nIn order to deploy the example, simply run:\n\n```bash\nserverless deploy\n```\n\nThe output should look similar to:\n\n```bash\nServerless: Creating Stack...\nServerless: Checking Stack create progress...\n.....\nServerless: Stack create finished...\nServerless: Packaging service...\nServerless: Uploading CloudFormation file to S3...\nServerless: Uploading service .zip file to S3 (3.85 MB)...\nServerless: Updating Stack...\nServerless: Checking Stack update progress...\n........................\nServerless: Stack update finished...\nService Information\nservice: upload-to-s3-and-postprocess\nstage: dev\nregion: us-east-1\napi keys:\n  None\nendpoints:\n  None\nfunctions:\n  upload-to-s3-and-postprocess-dev-postprocess\n\n```\n\n## Usage\n\nOpen the generated `frontend/index.html` in your browser, or run:\n\n```bash\nxdg-open frontend/index.html\n```\n\nSelect a PNG image smaller than 1Mb, and click \"Upload File to S3\".\n\nYou should get an XML response similar to:\n\n```xml\n<PostResponse>\n  <Location>https://serverless-fetch-file-and-store-in-s3.s3.amazonaws.com/uploads%2Fimage.png</Location>\n  <Bucket>serverless-fetch-file-and-store-in-s3</Bucket>\n  <Key>uploads/image.png</Key>\n  <ETag>\"08c03c6a24e5058b9f3556981a23b1d7\"</ETag>\n</PostResponse>\n```\n\nAfter a while, the postprocess function gets triggered by an S3 event:\n\n```bash\nserverless logs --function postprocess\n```\n\n```\nSTART RequestId: e2deccf2a0-11e6-b6e3fbcfad7d8c Version: $LATEST\n2014 12:32:30.350 (+02:00)\te2deccf2a0-11e6-b6e3fbcfad7d8c\tNew .png object has been created: uploads/image.png (23975 bytes)\nEND RequestId: e2deccf2a0-11e6-b6e3fbcfad7d8c\nREPORT RequestId: e2deccf2a0-11e6-b6e3fbcfad7d8c\tDuration: 2.84 ms\tBilled Duration: 100 msMemory Size: 1024 MB\tMax Memory Used: 29 MB\n```\n"
+      },
+      "205fb43c-3198-4ec5-bdcd-5cc9550dc692": {
+        "id": "205fb43c-3198-4ec5-bdcd-5cc9550dc692",
+        "parent": null,
+        "name": "package.json",
+        "type": "JSON_FILE",
+        "isDirectory": false,
+        "children": [],
+        "isRemovable": true,
+        "filePath": "package.json",
+        "code": "{\n  \"name\": \"upload-to-s3-and-postprocess\",\n  \"description\": \"Upload a files to S3 to trigger a lambda function.\",\n  \"version\": \"1.0.0\",\n  \"author\": \"Christoph Gysin <christoph.gysin@gmail.com>\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n  }\n}\n"
+      },
+      "61469328-9d7c-46fe-9583-1d8ad75b9308": {
+        "id": "61469328-9d7c-46fe-9583-1d8ad75b9308",
+        "parent": "2d186aa6-2ce0-46e4-87f8-1bd5de0090b8",
+        "name": "index.template.html",
+        "type": "HTML_FILE",
+        "isDirectory": false,
+        "children": [],
+        "isRemovable": true,
+        "filePath": "upload-to-s3-and-postprocess/frontend/index.template.html",
+        "code": "<html>\n  <head>\n    <title>S3 POST Form</title>\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\" />\n  </head>\n\n  <body>\n    <form action=\"%BUCKET_URL%\" method=\"post\" enctype=\"multipart/form-data\">\n      <input type=\"hidden\" name=\"Content-Type\" value=\"image/png\">\n      <input type=\"hidden\" name=\"AWSAccessKeyId\" value=\"%AWS_ACCESS_KEY%\">\n      <input type=\"hidden\" name=\"acl\" value=\"public-read\">\n      <input type=\"hidden\" name=\"success_action_status\" value=\"201\">\n      <input type=\"hidden\" name=\"policy\" value=\"%POLICY_BASE64%\">\n      <input type=\"hidden\" name=\"signature\" value=\"%SIGNATURE%\">\n\n      Destination filename: <input type=\"text\" name=\"key\" value=\"uploads/image.png\">\n      <br>\n      File to upload to S3:\n      <input name=\"file\" type=\"file\">\n      <br>\n      <input type=\"submit\" value=\"Upload File to S3\">\n    </form>\n  </body>\n</html>\n"
+      }
+    },
+    "rootNode": "c3c0d832-0316-4205-bb0e-109245f531e5",
+    "openFiles": [
+      "5a9dd21b-06b6-4ea4-887d-d8dd394bf243",
+      "ac0f6ab8-dfdd-4dcc-93f8-5d4aec60595f",
+      "e275e53e-c3f2-4707-aa89-d06b5c0bda3d"
+    ],
+    "currentFileId": "5a9dd21b-06b6-4ea4-887d-d8dd394bf243",
+    "resources": {
+      "s3yourBucketName": {
+        "type": "S3",
+        "name": "s3yourBucketName",
+        "config": {
+          "mode": 0,
+          "bucket": {
+            "name": "<your-bucket-name>"
+          }
+        }
+      },
+      "s3cloud9Ktest": {
+        "name": "s3cloud9Ktest",
+        "type": "S3",
+        "config": {
+          "mode": 1,
+          "bucket": {
+            "region": "us-east-1",
+            "name": "cloud9-ktest"
+          }
+        }
+      }
+    },
+    "customTemplate": {
+      "dialect": "CloudFormation",
+      "definitions": null
+    },
+    "envVariables": [
+      {
+        "lambdaId": "all",
+        "varKey": "SIGMA_AWS_ACC_ID",
+        "varValue": null,
+        "shouldPersist": false,
+        "displayOnly": false,
+        "editable": false
+      },
+      {
+        "lambdaId": "all",
+        "varKey": "awsAccessKeyId",
+        "varValue": null,
+        "shouldPersist": false,
+        "displayOnly": false,
+        "editable": true
+      },
+      {
+        "lambdaId": "all",
+        "varKey": "awsSecretAccessKey",
+        "varValue": null,
+        "shouldPersist": false,
+        "displayOnly": false,
+        "editable": true
+      }
+    ],
+    "packageJSON": {
+      "dependencies": {}
+    }
+  },
+  "PROJECT_META": {
+    "projectName": "upload-to-s3-and-postprocess",
+    "projectDescription": "Upload a files to S3 to trigger a lambda function.",
+    "projectVersion": "1.0.0",
+    "projectRegion": "us-east-1",
+    "platform": "AWS",
+    "platformRegions": {},
+    "lastSave": 1576577189428
+  },
+  "VCS_STATE": {
+    "provider": "GitHub",
+    "repo": {
+      "name": "serverless40",
+      "url": "https://github.com/kumudikatest/serverless40"
+    }
+  }
+}
